@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Level JSON Reader</title>
+</head>
+
+<body>
+    <div class="file-selectors">
+        <label for="file">Choose a Level File:
+            <input type="file" name="file" id="file" accept=".level">
+        </label>
+        <br>
+        <label for="verified-file">Choose a Verified Level File:
+            <input type="file" name="verified-file" id="verified-file" accept=".level">
+        </label>
+    </div>
+    <button id="compare-button">Compare to Verified Data</button>
+
+    <div id="console-output"></div>
+
+    <script src="//cdn.jsdelivr.net/npm/protobufjs@7.X.X/dist/protobuf.js"></script>
+    <script type="text/javascript">
+        let levelData = null;
+        let verifiedData = null;
+        let verifiedDataArray = []; // Array to store verified data entries
+
+        document.getElementById('file').addEventListener("change", function (e) {
+            const file = e.target.files[0];
+            if (file) {
+                readLevelFile(file);
+            }
+        }, false);
+
+        document.getElementById('verified-file').addEventListener("change", function (e) {
+            const verifiedFile = e.target.files[0];
+            if (verifiedFile) {
+                readVerifiedLevelFile(verifiedFile);
+            }
+        }, false);
+        // Add this after your other event listeners
+        document.getElementById('compare-button').addEventListener("click", function () {
+            compareDataPatterns();
+        }, false);
+
+        function readLevelFile(file) {
+            const reader = new FileReader();
+            reader.onload = function () {
+                const data = reader.result;
+                protobuf.load("proto/level.proto", function (err, root) {
+                    if (err) throw err;
+                    const message = root.lookupType("COD.Level.Level");
+                    const decoded = message.decode(new Uint8Array(data));
+                    levelData = message.toObject(decoded);
+                    console.log(levelData);
+                    displayLevelInfo(levelData);
+                    // compareDataPatterns();
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function readVerifiedLevelFile(file) {
+            const reader = new FileReader();
+            reader.onload = function () {
+                const data = reader.result;
+                protobuf.load("proto/level.proto", function (err, root) {
+                    if (err) throw err;
+                    const message = root.lookupType("COD.Level.Level");
+                    const decoded = message.decode(new Uint8Array(data));
+                    const verifiedDataEntry = message.toObject(decoded);
+                    verifiedDataArray.push(verifiedDataEntry); // Store verified data entry in the array
+                    console.log(verifiedDataArray);
+                    console.log(verifiedDataEntry); // Optional: log the updated array
+                });
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+
+        function displayLevelInfo(levelData) {
+            const consoleOutput = document.getElementById('console-output');
+            consoleOutput.innerHTML = "<pre>" + JSON.stringify(levelData, null, 4) + "</pre>";
+        }
+        // Inside the compareDataPatterns function
+        function compareDataPatterns() {
+            if (levelData && verifiedDataArray.length ) {
+                const consoleOutput = document.getElementById('console-output');
+                let resultsHTML = "<pre>Pattern Matching Results:</pre>";
+
+                // Calculate probabilities for verified levels
+                const verifiedComplexityCounts = {}; // { '1200-1299': 5, ... }
+                const verifiedShapeCounts = {}; // { shape: count, ... }
+                // ... calculate counts for other attributes
+
+                for (let verifiedDataEntrys of verifiedDataArray) {
+                    // Update complexity counts
+                    const verifiedComplexityRange = getComplexityRange(verifiedDataEntrys.complexity);
+                    verifiedComplexityCounts[verifiedComplexityRange] =
+                        (verifiedComplexityCounts[verifiedComplexityRange] || 0) + 1;
+
+                    // Update shape counts
+                    const verifiedShape = verifiedDataEntrys.levelNodes[0].levelNodeStatic.shape;
+                    verifiedShapeCounts[verifiedShape] = (verifiedShapeCounts[verifiedShape] || 0) + 1;
+
+                    // ... update counts for other attributes
+                }
+
+                // Calculate probabilities for verified data
+                const totalVerifiedLevels = verifiedDataArray.length;
+                const verifiedComplexityProbabilities = calculateProbabilities(verifiedComplexityCounts, totalVerifiedLevels);
+                const verifiedShapeProbabilities = calculateProbabilities(verifiedShapeCounts, totalVerifiedLevels);
+                // ... calculate probabilities for other attributes
+
+                // Compare regular levels with verified data
+                for (let regularData of regularDataArray) {
+                    // Calculate match probabilities for complexity and attributes
+                    const regularComplexity = regularData.complexity;
+                    const regularComplexityRange = getComplexityRange(regularComplexity);
+                    const regularShape = regularData.levelNodes[0].levelNodeStatic.shape;
+                    // ... calculate other attribute values for regular data
+
+                    const complexityMatchProbability = verifiedComplexityProbabilities[regularComplexityRange] || 0;
+                    const shapeMatchProbability = verifiedShapeProbabilities[regularShape] || 0;
+                    // ... calculate match probabilities for other attributes
+
+                    // Calculate overall match probability
+                    const overallMatchProbability = complexityMatchProbability * shapeMatchProbability;
+                    resultsHTML += `<pre>Level ${regularData.title} Match Probability: ${overallMatchProbability}</pre>`;
+                }
+
+                consoleOutput.innerHTML = resultsHTML;
+            }
+        }
+
+        function getComplexityRange(complexity) {
+            return `${Math.floor(complexity / 100) * 100}-${Math.floor(complexity / 100) * 100 + 99}`;
+        }
+
+        function calculateProbabilities(counts, totalCount) {
+            const probabilities = {};
+            for (let key in counts) {
+                probabilities[key] = counts[key] / totalCount;
+            }
+            return probabilities;
+        }
+
+        // Call the compareDataPatterns function when the "Compare to Verified Data" button is clicked
+        document.getElementById('compare-button').addEventListener("click", function () {
+            compareDataPatterns();
+        }, false);
+
+
+
+    </script>
+</body>
+
+  </html>

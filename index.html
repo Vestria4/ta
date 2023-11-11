@@ -1,160 +1,199 @@
 <!DOCTYPE html>
-<html lang="en">
+
+<html>
+
+
 
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Level JSON Reader</title>
+
+    <title>Read Protobuf</title>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/protobufjs/6.11.2/protobuf.min.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/0.156.1/three.js"></script>
+
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+
 </head>
 
+
+
 <body>
-    <div class="file-selectors">
-        <label for="file">Choose a Level File:
-            <input type="file" name="file" id="file" accept=".level">
-        </label>
-        <br>
-        <label for="verified-file">Choose a Verified Level File:
-            <input type="file" name="verified-file" id="verified-file" accept=".level">
-        </label>
-    </div>
-    <button id="compare-button">Compare to Verified Data</button>
 
-    <div id="console-output"></div>
+    <input type="file" id="fileInput">
 
-    <script src="//cdn.jsdelivr.net/npm/protobufjs@7.X.X/dist/protobuf.js"></script>
-    <script type="text/javascript">
-        let levelData = null;
-        let verifiedData = null;
-        let verifiedDataArray = []; // Array to store verified data entries
+    <pre id="output"></pre>
 
-        document.getElementById('file').addEventListener("change", function (e) {
-            const file = e.target.files[0];
-            if (file) {
-                readLevelFile(file);
-            }
-        }, false);
+    <div id="canvas"></div>
 
-        document.getElementById('verified-file').addEventListener("change", function (e) {
-            const verifiedFile = e.target.files[0];
-            if (verifiedFile) {
-                readVerifiedLevelFile(verifiedFile);
-            }
-        }, false);
-        // Add this after your other event listeners
-        document.getElementById('compare-button').addEventListener("click", function () {
-            compareDataPatterns();
-        }, false);
 
-        function readLevelFile(file) {
-            const reader = new FileReader();
-            reader.onload = function () {
-                const data = reader.result;
-                protobuf.load("proto/level.proto", function (err, root) {
-                    if (err) throw err;
-                    const message = root.lookupType("COD.Level.Level");
-                    const decoded = message.decode(new Uint8Array(data));
-                    levelData = message.toObject(decoded);
-                    console.log(levelData);
-                    displayLevelInfo(levelData);
-                    // compareDataPatterns();
+
+    <script>
+
+        var root = null;
+
+        protobuf.load(["types.proto", "level.proto"], function (err, loadedRoot) {
+
+            if (err) throw err;
+
+            root = loadedRoot;
+
+        });
+
+        var hexColor;
+
+        function rgbToHex(r, g, b) {
+
+            r = Math.floor(r);
+
+            g = Math.floor(g);
+
+            b = Math.floor(b);
+
+            var hex = ((r << 16) | (g << 8) | b).toString(16);
+
+            hexColor = "#" + new Array(Math.abs(hex.length - 7)).join("0") + hex;
+
+            return "#" + new Array(Math.abs(hex.length - 7)).join("0") + hex;
+
+        }
+
+
+
+        var scene = new THREE.Scene();
+
+        var camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        const light = new THREE.AmbientLight(0x404040); // soft white light
+
+        scene.add(light);
+
+        var renderer = new THREE.WebGLRenderer();
+
+
+
+        renderer.setSize(window.innerWidth, window.innerHeight);
+
+        document.getElementById('canvas').appendChild(renderer.domElement);
+
+
+
+        document.getElementById('fileInput').addEventListener('change', function (e) {
+
+            var file = e.target.files[0];
+
+            if (!file) return;
+
+
+
+            var reader = new FileReader();
+
+            reader.onload = function (e) {
+
+                var Level = root.lookupType("COD.Level.Level");
+
+                var buffer = new Uint8Array(reader.result);
+
+                var message = Level.decode(buffer);
+
+                var object = Level.toObject(message, { longs: String, enums: String, bytes: String });
+
+                console.log(object);
+
+                console.log(object.levelNodes[0])
+
+                console.log(object.levelNodes[0].levelNodeStatic)
+
+                document.getElementById('output').textContent = JSON.stringify(object, null, 2);
+
+                object.levelNodes.forEach(function (node) {
+
+                    if (node.levelNodeStart) {
+
+                        var startX = node.levelNodeStart.position.x;
+
+                        var startZ = node.levelNodeStart.position.z;
+
+                        var startY = node.levelNodeStart.position.y;
+
+                        camera.position.set(startX, startY, startZ);
+
+                    }
+
+                    if (node.levelNodeStatic) {
+
+                        var nodeshape = node.levelNodeStatic.shape;
+
+                        var nodeX = node.levelNodeStatic.position.x;
+
+                        var nodeZ = node.levelNodeStatic.position.z;
+
+                        var nodeY = node.levelNodeStatic.position.y;
+
+
+
+                        var scaleX = node.levelNodeStatic.scale.x;
+
+                        var scaleZ = node.levelNodeStatic.scale.z;
+
+                        var scaleY = node.levelNodeStatic.scale.y;
+
+                        var colorrgb;
+
+                        if (node.levelNodeStatic.color) {
+
+                            var r = node.levelNodeStatic.color.r * 254;
+
+                            var g = node.levelNodeStatic.color.g * 254;
+
+                            var b = node.levelNodeStatic.color.b * 254;
+
+                            colorrgb = rgbToHex(r, g, b);
+
+                        }
+
+                        const texture = new THREE.TextureLoader().load('./default_colored-803ae9d6.png');
+
+                        var geometry = new THREE.BoxGeometry(1, 1, 1);
+
+                        var material = new THREE.MeshBasicMaterial({ color: hexColor, map: texture });
+
+                        var cube = new THREE.Mesh(geometry, material);
+
+                        cube.position.set(nodeX, nodeY, nodeZ);
+
+                        cube.scale.set(scaleX, scaleY, scaleZ);
+
+                        scene.add(cube);
+
+
+
+
+
+                        console.log(node.levelNodeStatic);
+
+                    }
+
                 });
+
+                const light = new THREE.AmbientLight(0x404040); // soft white light
+
+                scene.add(light);
+
+                renderer.render(scene, camera, light);
+
+
+
             };
+
             reader.readAsArrayBuffer(file);
-        }
 
-        function readVerifiedLevelFile(file) {
-            const reader = new FileReader();
-            reader.onload = function () {
-                const data = reader.result;
-                protobuf.load("proto/level.proto", function (err, root) {
-                    if (err) throw err;
-                    const message = root.lookupType("COD.Level.Level");
-                    const decoded = message.decode(new Uint8Array(data));
-                    const verifiedDataEntry = message.toObject(decoded);
-                    verifiedDataArray.push(verifiedDataEntry); // Store verified data entry in the array
-                    console.log(verifiedDataArray);
-                    console.log(verifiedDataEntry); // Optional: log the updated array
-                });
-            };
-            reader.readAsArrayBuffer(file);
-        }
-
-
-        function displayLevelInfo(levelData) {
-            const consoleOutput = document.getElementById('console-output');
-            consoleOutput.innerHTML = "<pre>" + JSON.stringify(levelData, null, 4) + "</pre>";
-        }
-        // Inside the compareDataPatterns function
-        function compareDataPatterns() {
-            if (levelData && verifiedDataArray.length ) {
-                const consoleOutput = document.getElementById('console-output');
-                let resultsHTML = "<pre>Pattern Matching Results:</pre>";
-
-                // Calculate probabilities for verified levels
-                const verifiedComplexityCounts = {}; // { '1200-1299': 5, ... }
-                const verifiedShapeCounts = {}; // { shape: count, ... }
-                // ... calculate counts for other attributes
-
-                for (let verifiedDataEntrys of verifiedDataArray) {
-                    // Update complexity counts
-                    const verifiedComplexityRange = getComplexityRange(verifiedDataEntrys.complexity);
-                    verifiedComplexityCounts[verifiedComplexityRange] =
-                        (verifiedComplexityCounts[verifiedComplexityRange] || 0) + 1;
-
-                    // Update shape counts
-                    const verifiedShape = verifiedDataEntrys.levelNodes[0].levelNodeStatic.shape;
-                    verifiedShapeCounts[verifiedShape] = (verifiedShapeCounts[verifiedShape] || 0) + 1;
-
-                    // ... update counts for other attributes
-                }
-
-                // Calculate probabilities for verified data
-                const totalVerifiedLevels = verifiedDataArray.length;
-                const verifiedComplexityProbabilities = calculateProbabilities(verifiedComplexityCounts, totalVerifiedLevels);
-                const verifiedShapeProbabilities = calculateProbabilities(verifiedShapeCounts, totalVerifiedLevels);
-                // ... calculate probabilities for other attributes
-
-                // Compare regular levels with verified data
-                for (let regularData of regularDataArray) {
-                    // Calculate match probabilities for complexity and attributes
-                    const regularComplexity = regularData.complexity;
-                    const regularComplexityRange = getComplexityRange(regularComplexity);
-                    const regularShape = regularData.levelNodes[0].levelNodeStatic.shape;
-                    // ... calculate other attribute values for regular data
-
-                    const complexityMatchProbability = verifiedComplexityProbabilities[regularComplexityRange] || 0;
-                    const shapeMatchProbability = verifiedShapeProbabilities[regularShape] || 0;
-                    // ... calculate match probabilities for other attributes
-
-                    // Calculate overall match probability
-                    const overallMatchProbability = complexityMatchProbability * shapeMatchProbability;
-                    resultsHTML += `<pre>Level ${regularData.title} Match Probability: ${overallMatchProbability}</pre>`;
-                }
-
-                consoleOutput.innerHTML = resultsHTML;
-            }
-        }
-
-        function getComplexityRange(complexity) {
-            return `${Math.floor(complexity / 100) * 100}-${Math.floor(complexity / 100) * 100 + 99}`;
-        }
-
-        function calculateProbabilities(counts, totalCount) {
-            const probabilities = {};
-            for (let key in counts) {
-                probabilities[key] = counts[key] / totalCount;
-            }
-            return probabilities;
-        }
-
-        // Call the compareDataPatterns function when the "Compare to Verified Data" button is clicked
-        document.getElementById('compare-button').addEventListener("click", function () {
-            compareDataPatterns();
-        }, false);
-
-
+        });
 
     </script>
+
 </body>
 
-  </html>
+
+
+</html>
